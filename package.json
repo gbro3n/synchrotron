@@ -1,0 +1,51 @@
+{
+    "name": "@gbro3n/synchrotron",
+    "version": "0.1.0",
+    "description": "A local, platform-agnostic file synchronisation tool",
+    "main": "dist/index.js",
+    "types": "dist/index.d.ts",
+    "bin": {
+        "synchrotron": "dist/cli/index.js"
+    },
+    "files": [
+        "dist/",
+        "README.md"
+    ],
+    "scripts": {
+        "build": "tsc",
+        "watch": "tsc --watch",
+        "start": "node dist/cli/index.js",
+        "lint": "eslint src/ --ext .ts",
+        "lint:fix": "eslint src/ --ext .ts --fix",
+        "format": "prettier --write \"src/**/*.ts\"",
+        "test": "vitest run",
+        "test:watch": "vitest",
+        "prepublishOnly": "npm run build"
+    },
+    "keywords": [
+        "sync",
+        "file-sync",
+        "synchronisation",
+        "backup"
+    ],
+    "author": "",
+    "license": "MIT",
+    "engines": {
+        "node": ">=18.0.0"
+    },
+    "dependencies": {
+        "commander": "^14.0.3",
+        "minimatch": "^10.2.2",
+        "yaml": "^2.8.2"
+    },
+    "devDependencies": {
+        "@eslint/js": "^10.0.1",
+        "@types/node": "^25.3.0",
+        "eslint": "^10.0.2",
+        "prettier": "^3.8.1",
+        "tsx": "^4.21.0",
+        "typescript": "^5.9.3",
+        "typescript-eslint": "^8.56.1",
+        "vitest": "^4.0.18"
+    }
+}

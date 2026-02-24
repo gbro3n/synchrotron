@@ -1,0 +1,31 @@
+# Collaborative planning documents
+
+memory.md
+plan.md
+todo.md
+/agent/archive/*
+
+# Dependencies
+node_modules/
+
+# Build output
+dist/
+*.tsbuildinfo
+
+# IDE
+.vscode/
+.idea/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Logs
+*.log
+
+# Package build
+*.tgz
+
+# Apps own metadata files
+.synchrotron
+*.synchrotron
