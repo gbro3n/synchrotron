@@ -56,16 +56,21 @@ export class SyncEngine {
             syncSet.conflictResolution ?? this.defaultConflictResolution;
         const ignorePatterns = syncSet.ignore ?? [];
 
-        // Ensure all directories exist
+        // Ensure all directories exist — create missing ones as fresh peers
         for (const dirPath of syncSet.paths) {
             if (!fs.existsSync(dirPath)) {
-                result.errors.push(`Directory does not exist: ${dirPath}`);
-                result.actions.push({
-                    type: "error",
-                    sourcePath: dirPath,
-                    detail: "Directory does not exist",
-                });
-                return result;
+                try {
+                    fs.mkdirSync(dirPath, { recursive: true });
+                } catch (err) {
+                    const message = err instanceof Error ? err.message : String(err);
+                    result.errors.push(`Cannot create directory: ${dirPath}: ${message}`);
+                    result.actions.push({
+                        type: "error",
+                        sourcePath: dirPath,
+                        detail: `Cannot create directory: ${message}`,
+                    });
+                    return result;
+                }
             }
         }
 

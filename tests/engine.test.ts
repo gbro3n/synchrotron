@@ -180,12 +180,18 @@ describe("SyncEngine", () => {
     });
 
     describe("error handling", () => {
-        it("should report error for non-existent directory", async () => {
+        it("should create non-existent directory as fresh peer", async () => {
+            const newDir = path.join(dir2, "subdir", "deep");
+            fs.writeFileSync(path.join(dir1, "file.txt"), "data");
+
             const result = await engine.syncSet({
                 type: "directory",
-                paths: [dir1, "/non/existent/path"],
+                paths: [dir1, newDir],
             });
-            expect(result.errors.length).toBeGreaterThan(0);
+
+            expect(result.errors).toHaveLength(0);
+            expect(fs.existsSync(newDir)).toBe(true);
+            expect(fs.readFileSync(path.join(newDir, "file.txt"), "utf-8")).toBe("data");
         });
     });
 
@@ -231,14 +237,19 @@ describe("SyncEngine", () => {
             expect(deletedActions.length).toBeGreaterThan(0);
         });
 
-        it("should record error actions for non-existent paths", async () => {
+        it("should create missing directories and record added actions", async () => {
+            const newDir = path.join(dir2, "auto-created");
+            fs.writeFileSync(path.join(dir1, "test.txt"), "hello");
+
             const result = await engine.syncSet({
                 type: "directory",
-                paths: [dir1, "/does/not/exist"],
+                paths: [dir1, newDir],
             });
 
-            const errorActions = result.actions.filter((a) => a.type === "error");
-            expect(errorActions.length).toBeGreaterThan(0);
+            expect(result.errors).toHaveLength(0);
+            const addedActions = result.actions.filter((a) => a.type === "added");
+            expect(addedActions.length).toBeGreaterThan(0);
+            expect(fs.existsSync(path.join(newDir, "test.txt"))).toBe(true);
         });
     });
 });

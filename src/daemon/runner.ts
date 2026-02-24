@@ -1,3 +1,5 @@
+import * as fs from "node:fs";
+import * as path from "node:path";
 import { loadConfig } from "../config/loader.js";
 import type { SynchrotronConfig } from "../config/types.js";
 import { SyncEngine } from "../sync/engine.js";
@@ -174,6 +176,22 @@ export function runForeground(configDir?: string): void {
             const pollInterval = syncSet.pollInterval ?? config.pollInterval;
             const watchMode = syncSet.type === "file" ? "auto" : (syncSet.watchMode ?? "auto");
             const label = setLabel(i);
+
+            // Ensure directories exist before watching.
+            // For directory sets: create missing dirs (they are valid fresh peers).
+            // For file sets: create parent directories of missing files.
+            for (const p of syncSet.paths) {
+                const dirToEnsure = syncSet.type === "directory" ? p : path.dirname(p);
+                if (!fs.existsSync(dirToEnsure)) {
+                    try {
+                        fs.mkdirSync(dirToEnsure, { recursive: true });
+                        logger.info(`Created missing directory: ${dirToEnsure}`);
+                    } catch (err) {
+                        const message = err instanceof Error ? err.message : String(err);
+                        logger.warn(`Cannot create directory ${dirToEnsure}: ${message}`);
+                    }
+                }
+            }
 
             const watcher = new Watcher({
                 paths: syncSet.paths,
