@@ -188,4 +188,57 @@ describe("SyncEngine", () => {
             expect(result.errors.length).toBeGreaterThan(0);
         });
     });
+
+    describe("sync actions tracking", () => {
+        it("should record added actions for fresh peer sync", async () => {
+            fs.writeFileSync(path.join(dir1, "a.txt"), "hello");
+            fs.writeFileSync(path.join(dir1, "b.txt"), "world");
+
+            const result = await engine.syncSet({
+                type: "directory",
+                paths: [dir1, dir2],
+            });
+
+            expect(result.actions).toBeDefined();
+            const addedActions = result.actions.filter((a) => a.type === "added");
+            expect(addedActions.length).toBeGreaterThan(0);
+            // Each added action should have sourcePath and destPath
+            for (const action of addedActions) {
+                expect(action.sourcePath).toBeTruthy();
+                expect(action.destPath).toBeTruthy();
+            }
+        });
+
+        it("should record modified actions when a file changes", async () => {
+            fs.writeFileSync(path.join(dir1, "file.txt"), "original");
+            await engine.syncSet({ type: "directory", paths: [dir1, dir2] });
+
+            fs.writeFileSync(path.join(dir1, "file.txt"), "changed");
+            const result = await engine.syncSet({ type: "directory", paths: [dir1, dir2] });
+
+            const modifiedActions = result.actions.filter((a) => a.type === "modified");
+            expect(modifiedActions.length).toBeGreaterThan(0);
+        });
+
+        it("should record deleted actions when a file is removed", async () => {
+            fs.writeFileSync(path.join(dir1, "file.txt"), "data");
+            await engine.syncSet({ type: "directory", paths: [dir1, dir2] });
+
+            fs.unlinkSync(path.join(dir1, "file.txt"));
+            const result = await engine.syncSet({ type: "directory", paths: [dir1, dir2] });
+
+            const deletedActions = result.actions.filter((a) => a.type === "deleted");
+            expect(deletedActions.length).toBeGreaterThan(0);
+        });
+
+        it("should record error actions for non-existent paths", async () => {
+            const result = await engine.syncSet({
+                type: "directory",
+                paths: [dir1, "/does/not/exist"],
+            });
+
+            const errorActions = result.actions.filter((a) => a.type === "error");
+            expect(errorActions.length).toBeGreaterThan(0);
+        });
+    });
 });

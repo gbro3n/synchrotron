@@ -24,6 +24,8 @@ export type SyncSetType = "directory" | "file";
  * A sync set — a group of paths (directories or files) to keep in sync.
  */
 export interface SyncSet {
+    /** Optional label for log readability and status display */
+    name?: string;
     /** Whether the set syncs directories or individual files */
     type: SyncSetType;
     /** Absolute paths to sync. For directory sets: directories. For file sets: individual files. */
@@ -46,6 +48,10 @@ export interface SynchrotronConfig {
     pollInterval: number;
     /** Default conflict resolution strategy */
     conflictResolution: ConflictResolution;
+    /** Maximum size of a single log file in MB before rotation (default: 10) */
+    maxLogSizeMB: number;
+    /** Maximum number of rotated log files to keep (default: 5) */
+    maxLogFiles: number;
     /** List of sync sets */
     syncSets: SyncSet[];
 }
@@ -92,6 +98,22 @@ export interface ManifestDiff {
 export const CONFIG_DEFAULTS = {
     pollInterval: 5000,
     conflictResolution: "keep-both" as ConflictResolution,
+    maxLogSizeMB: 10,
+    maxLogFiles: 5,
     configFileName: ".synchrotron.yml",
     metadataFileName: ".synchrotron",
 } as const;
+
+/**
+ * A per-file action recorded during sync, for verbose logging.
+ */
+export interface SyncAction {
+    /** What happened: added, modified, deleted, conflict, or error */
+    type: "added" | "modified" | "deleted" | "conflict" | "error";
+    /** Absolute source path (or the path acted upon for deletes) */
+    sourcePath: string;
+    /** Absolute destination path (absent for deletes) */
+    destPath?: string;
+    /** Extra detail, e.g. conflict strategy used, error message */
+    detail?: string;
+}

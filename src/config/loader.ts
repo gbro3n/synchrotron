@@ -37,6 +37,18 @@ export function validateConfig(config: unknown): SynchrotronConfig {
             ? (raw.conflictResolution as SynchrotronConfig["conflictResolution"])
             : CONFIG_DEFAULTS.conflictResolution;
 
+    const maxLogSizeMB =
+        typeof raw.maxLogSizeMB === "number" ? raw.maxLogSizeMB : CONFIG_DEFAULTS.maxLogSizeMB;
+    if (maxLogSizeMB <= 0) {
+        throw new Error("maxLogSizeMB must be a positive number");
+    }
+
+    const maxLogFiles =
+        typeof raw.maxLogFiles === "number" ? raw.maxLogFiles : CONFIG_DEFAULTS.maxLogFiles;
+    if (maxLogFiles <= 0 || !Number.isInteger(maxLogFiles)) {
+        throw new Error("maxLogFiles must be a positive integer");
+    }
+
     // null means the key exists but has no items (e.g. "syncSets:" with only commented examples below)
     // undefined means the key is missing entirely — that is an error
     if (!("syncSets" in raw)) {
@@ -74,6 +86,10 @@ export function validateConfig(config: unknown): SynchrotronConfig {
             paths: s.paths as string[],
         };
 
+        if (typeof s.name === "string" && s.name.trim() !== "") {
+            syncSet.name = s.name.trim();
+        }
+
         if (type === "directory") {
             if (Array.isArray(s.ignore)) {
                 syncSet.ignore = s.ignore.filter((i): i is string => typeof i === "string");
@@ -99,7 +115,7 @@ export function validateConfig(config: unknown): SynchrotronConfig {
         return syncSet;
     });
 
-    return { pollInterval, conflictResolution, syncSets };
+    return { pollInterval, conflictResolution, maxLogSizeMB, maxLogFiles, syncSets };
 }
 
 /**
@@ -144,12 +160,18 @@ export function writeDefaultConfig(configDir?: string): string {
         "# Default conflict resolution strategy: keep-both | last-write-wins",
         "conflictResolution: keep-both",
         "",
+        "# Log rotation settings (optional)",
+        "# maxLogSizeMB: 10    # Max log file size in MB before rotation (default: 10)",
+        "# maxLogFiles: 5      # Max number of rotated log files to keep (default: 5)",
+        "",
         "# Sync sets — each entry syncs a group of paths",
         "# Each set must declare a type: directory (syncs full trees) or file (syncs individual files)",
+        "# An optional 'name' field labels the set in logs and status output.",
         "# Add your sets below. Remove the '#' from the examples to get started.",
         "syncSets:",
         "# Directory sync example:",
-        "# - type: directory",
+        "# - name: documents",
+        "#   type: directory",
         "#   paths:",
         "#     - /home/user/documents",
         "#     - /mnt/backup/documents",
@@ -160,7 +182,8 @@ export function writeDefaultConfig(configDir?: string): string {
         "#   pollInterval: 5000",
         "#",
         "# File sync example (syncs individual files by content, regardless of filename):",
-        "# - type: file",
+        "# - name: hosts",
+        "#   type: file",
         "#   paths:",
         "#     - /etc/hosts",
         "#     - /mnt/backup/hosts",

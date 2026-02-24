@@ -39,6 +39,7 @@ export function startCommand(options: StartOptions): void {
             detached: true,
             stdio: "ignore",
             cwd: configDir,
+            windowsHide: true,
         });
 
         child.unref();

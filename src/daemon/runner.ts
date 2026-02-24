@@ -10,24 +10,69 @@ import { writePidFile, removePidFile } from "./pid.js";
  * @param configDir Directory containing the config file (defaults to cwd)
  */
 export function runForeground(configDir?: string): void {
-    const logger = new Logger();
     let config: SynchrotronConfig;
     let running = true;
+    let logger: Logger;
 
     try {
         config = loadConfig(configDir);
     } catch (err) {
         const message = err instanceof Error ? err.message : String(err);
+        // Create a default logger just to record the startup failure
+        logger = new Logger();
         logger.error(`Failed to load config: ${message}`);
         console.error(`Error: ${message}`);
         process.exit(1);
     }
+
+    logger = new Logger({
+        maxLogSizeMB: config.maxLogSizeMB,
+        maxLogFiles: config.maxLogFiles,
+    });
 
     writePidFile();
     logger.info(`Daemon started (PID: ${process.pid})`);
     logger.info(`Config loaded: ${config.syncSets.length} sync set(s)`);
 
     const engine = new SyncEngine(config.conflictResolution);
+
+    /**
+     * Build a human-readable label for a sync set.
+     * Uses the optional name if present, otherwise falls back to index.
+     */
+    function setLabel(index: number): string {
+        const syncSet = config.syncSets[index];
+        return syncSet?.name ? `"${syncSet.name}"` : `set[${index}]`;
+    }
+
+    /**
+     * Log each per-file action from a sync result.
+     */
+    function logActions(result: import("../sync/engine.js").SyncResult): void {
+        for (const action of result.actions) {
+            switch (action.type) {
+                case "added":
+                    logger.info(`  + ${action.sourcePath} → ${action.destPath} (added)`);
+                    break;
+                case "modified":
+                    logger.info(`  ~ ${action.sourcePath} → ${action.destPath} (modified)`);
+                    break;
+                case "deleted":
+                    logger.info(`  - ${action.sourcePath} (deleted)`);
+                    break;
+                case "conflict":
+                    logger.info(
+                        `  ! ${action.sourcePath} → ${action.destPath ?? "?"} (conflict: ${action.detail ?? "unknown"})`,
+                    );
+                    break;
+                case "error":
+                    logger.error(
+                        `  ✗ ${action.sourcePath}${action.destPath ? ` → ${action.destPath}` : ""} (${action.detail ?? "error"})`,
+                    );
+                    break;
+            }
+        }
+    }
 
     // Set up graceful shutdown
     const shutdown = (): void => {
@@ -72,12 +117,13 @@ export function runForeground(configDir?: string): void {
             const syncSet = config.syncSets[index];
             if (!syncSet) return;
 
-            const label = `set[${index}]`;
-            logger.info(`Syncing ${label}...`);
+            const label = setLabel(index);
+            logger.info(`Syncing ${label} (${syncSet.type})...`);
             try {
                 const result = syncSet.type === "file"
                     ? await engine.syncFileSet(syncSet, index)
                     : await engine.syncSet(syncSet, index);
+                logActions(result);
                 logger.info(
                     `Sync ${label} complete: ` +
                     `+${result.filesAdded} -${result.filesDeleted} ~${result.filesModified} ` +
@@ -99,12 +145,13 @@ export function runForeground(configDir?: string): void {
     async function initialSync(): Promise<void> {
         for (let i = 0; i < config.syncSets.length; i++) {
             const syncSet = config.syncSets[i];
-            const label = `set[${i}]`;
-            logger.info(`Initial sync for ${label}...`);
+            const label = setLabel(i);
+            logger.info(`Initial sync for ${label} (${syncSet.type})...`);
             try {
                 const result = syncSet.type === "file"
                     ? await engine.syncFileSet(syncSet, i)
                     : await engine.syncSet(syncSet, i);
+                logActions(result);
                 logger.info(
                     `Initial sync ${label} complete: ` +
                     `+${result.filesAdded} -${result.filesDeleted} ~${result.filesModified} ` +
@@ -126,7 +173,7 @@ export function runForeground(configDir?: string): void {
             const syncSet = config.syncSets[i];
             const pollInterval = syncSet.pollInterval ?? config.pollInterval;
             const watchMode = syncSet.type === "file" ? "auto" : (syncSet.watchMode ?? "auto");
-            const label = `set[${i}]`;
+            const label = setLabel(i);
 
             const watcher = new Watcher({
                 paths: syncSet.paths,

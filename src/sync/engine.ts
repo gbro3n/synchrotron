@@ -6,6 +6,7 @@ import type {
     ConflictResolution,
     FileEntry,
     SyncMetadata,
+    SyncAction,
 } from "../config/types.js";
 import { CONFIG_DEFAULTS } from "../config/types.js";
 import { readMetadata, writeMetadata, createEmptyMetadata } from "./metadata.js";
@@ -22,6 +23,7 @@ export interface SyncResult {
     filesModified: number;
     conflicts: number;
     errors: string[];
+    actions: SyncAction[];
 }
 
 /**
@@ -47,6 +49,7 @@ export class SyncEngine {
             filesModified: 0,
             conflicts: 0,
             errors: [],
+            actions: [],
         };
 
         const conflictResolution =
@@ -57,6 +60,11 @@ export class SyncEngine {
         for (const dirPath of syncSet.paths) {
             if (!fs.existsSync(dirPath)) {
                 result.errors.push(`Directory does not exist: ${dirPath}`);
+                result.actions.push({
+                    type: "error",
+                    sourcePath: dirPath,
+                    detail: "Directory does not exist",
+                });
                 return result;
             }
         }
@@ -88,14 +96,23 @@ export class SyncEngine {
                     // Handle fresh peers: copy everything from source, delete nothing
                     if (dest.isFresh) {
                         for (const entry of Object.values(source.currentManifest)) {
+                            const srcPath = path.join(source.dirPath, entry.relativePath);
+                            const destPath = path.join(dest.dirPath, entry.relativePath);
                             this.copyFile(source.dirPath, dest.dirPath, entry.relativePath);
                             result.filesAdded++;
+                            result.actions.push({
+                                type: "added",
+                                sourcePath: srcPath,
+                                destPath,
+                            });
                         }
                         continue;
                     }
 
                     // Propagate additions from source to dest
                     for (const entry of source.diff.added) {
+                        const srcPath = path.join(source.dirPath, entry.relativePath);
+                        const destPath = path.join(dest.dirPath, entry.relativePath);
                         if (dest.currentManifest[entry.relativePath]) {
                             // File exists at dest too — conflict
                             this.resolveConflict(
@@ -105,14 +122,27 @@ export class SyncEngine {
                                 conflictResolution,
                             );
                             result.conflicts++;
+                            result.actions.push({
+                                type: "conflict",
+                                sourcePath: srcPath,
+                                destPath,
+                                detail: conflictResolution,
+                            });
                         } else {
                             this.copyFile(source.dirPath, dest.dirPath, entry.relativePath);
                             result.filesAdded++;
+                            result.actions.push({
+                                type: "added",
+                                sourcePath: srcPath,
+                                destPath,
+                            });
                         }
                     }
 
                     // Propagate modifications from source to dest
                     for (const entry of source.diff.modified) {
+                        const srcPath = path.join(source.dirPath, entry.relativePath);
+                        const destPath = path.join(dest.dirPath, entry.relativePath);
                         if (this.isModifiedAtDest(dest, entry.relativePath)) {
                             // Both sides modified — conflict
                             this.resolveConflict(
@@ -122,23 +152,45 @@ export class SyncEngine {
                                 conflictResolution,
                             );
                             result.conflicts++;
+                            result.actions.push({
+                                type: "conflict",
+                                sourcePath: srcPath,
+                                destPath,
+                                detail: conflictResolution,
+                            });
                         } else {
                             this.copyFile(source.dirPath, dest.dirPath, entry.relativePath);
                             result.filesModified++;
+                            result.actions.push({
+                                type: "modified",
+                                sourcePath: srcPath,
+                                destPath,
+                            });
                         }
                     }
 
                     // Propagate deletions: only delete at dest if the file wasn't
                     // modified there since last sync
                     for (const entry of source.diff.deleted) {
+                        const destPath = path.join(dest.dirPath, entry.relativePath);
                         if (!this.isModifiedAtDest(dest, entry.relativePath)) {
                             this.deleteFile(dest.dirPath, entry.relativePath);
                             result.filesDeleted++;
+                            result.actions.push({
+                                type: "deleted",
+                                sourcePath: destPath,
+                            });
                         }
                     }
                 } catch (err) {
                     const message = err instanceof Error ? err.message : String(err);
                     result.errors.push(`Error syncing ${source.dirPath} → ${dest.dirPath}: ${message}`);
+                    result.actions.push({
+                        type: "error",
+                        sourcePath: source.dirPath,
+                        destPath: dest.dirPath,
+                        detail: message,
+                    });
                 }
             }
         }
@@ -314,6 +366,7 @@ export class SyncEngine {
             filesModified: 0,
             conflicts: 0,
             errors: [],
+            actions: [],
         };
 
         const conflictResolution = syncSet.conflictResolution ?? this.defaultConflictResolution;
@@ -378,12 +431,28 @@ export class SyncEngine {
                     this.copyFileDirect(source.filePath, dest.filePath);
                     if (dest.exists) {
                         result.filesModified++;
+                        result.actions.push({
+                            type: "modified",
+                            sourcePath: source.filePath,
+                            destPath: dest.filePath,
+                        });
                     } else {
                         result.filesAdded++;
+                        result.actions.push({
+                            type: "added",
+                            sourcePath: source.filePath,
+                            destPath: dest.filePath,
+                        });
                     }
                 } catch (err) {
                     const message = err instanceof Error ? err.message : String(err);
                     result.errors.push(`Error copying to ${dest.filePath}: ${message}`);
+                    result.actions.push({
+                        type: "error",
+                        sourcePath: source.filePath,
+                        destPath: dest.filePath,
+                        detail: message,
+                    });
                 }
             }
         } else {
@@ -401,9 +470,21 @@ export class SyncEngine {
                     try {
                         this.copyFileDirect(winner.filePath, dest.filePath);
                         result.filesModified++;
+                        result.actions.push({
+                            type: "conflict",
+                            sourcePath: winner.filePath,
+                            destPath: dest.filePath,
+                            detail: "last-write-wins",
+                        });
                     } catch (err) {
                         const message = err instanceof Error ? err.message : String(err);
                         result.errors.push(`Error copying to ${dest.filePath}: ${message}`);
+                        result.actions.push({
+                            type: "error",
+                            sourcePath: winner.filePath,
+                            destPath: dest.filePath,
+                            detail: message,
+                        });
                     }
                 }
             } else {
@@ -417,9 +498,20 @@ export class SyncEngine {
                     const conflictPath = `${base}.conflict-${timestamp}${ext}`;
                     try {
                         fs.renameSync(loser.filePath, conflictPath);
+                        result.actions.push({
+                            type: "conflict",
+                            sourcePath: loser.filePath,
+                            destPath: conflictPath,
+                            detail: "keep-both (renamed)",
+                        });
                     } catch (err) {
                         const message = err instanceof Error ? err.message : String(err);
                         result.errors.push(`Error renaming conflict file ${loser.filePath}: ${message}`);
+                        result.actions.push({
+                            type: "error",
+                            sourcePath: loser.filePath,
+                            detail: message,
+                        });
                     }
                 }
 
@@ -428,9 +520,21 @@ export class SyncEngine {
                     try {
                         this.copyFileDirect(winner.filePath, dest.filePath);
                         result.filesModified++;
+                        result.actions.push({
+                            type: "conflict",
+                            sourcePath: winner.filePath,
+                            destPath: dest.filePath,
+                            detail: "keep-both",
+                        });
                     } catch (err) {
                         const message = err instanceof Error ? err.message : String(err);
                         result.errors.push(`Error copying to ${dest.filePath}: ${message}`);
+                        result.actions.push({
+                            type: "error",
+                            sourcePath: winner.filePath,
+                            destPath: dest.filePath,
+                            detail: message,
+                        });
                     }
                 }
             }

@@ -39,7 +39,10 @@ export function statusCommand(options: StatusOptions = {}): void {
                 console.log("Sync Sets:");
                 for (let i = 0; i < config.syncSets.length; i++) {
                     const set = config.syncSets[i];
-                    console.log(`  [${i}] type: ${set.type}`);
+                    const label = set.name
+                        ? `[${i}] "${set.name}" (${set.type})`
+                        : `[${i}] type: ${set.type}`;
+                    console.log(`  ${label}`);
                     for (const p of set.paths) {
                         const exists = fs.existsSync(p);
                         if (set.type === "directory") {

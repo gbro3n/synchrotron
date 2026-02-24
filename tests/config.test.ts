@@ -124,5 +124,68 @@ describe("Config Loader", () => {
             });
             expect(config.syncSets[0].type).toBe("file");
         });
+
+        it("should accept optional name on sync set", () => {
+            const config = validateConfig({
+                syncSets: [
+                    { name: "photos", type: "directory", paths: ["/a", "/b"] },
+                ],
+            });
+            expect(config.syncSets[0].name).toBe("photos");
+        });
+
+        it("should omit name when not provided", () => {
+            const config = validateConfig({
+                syncSets: [
+                    { type: "directory", paths: ["/a", "/b"] },
+                ],
+            });
+            expect(config.syncSets[0].name).toBeUndefined();
+        });
+
+        it("should ignore empty name string", () => {
+            const config = validateConfig({
+                syncSets: [
+                    { name: "  ", type: "directory", paths: ["/a", "/b"] },
+                ],
+            });
+            expect(config.syncSets[0].name).toBeUndefined();
+        });
+
+        it("should use default maxLogSizeMB and maxLogFiles", () => {
+            const config = validateConfig({
+                syncSets: [],
+            });
+            expect(config.maxLogSizeMB).toBe(10);
+            expect(config.maxLogFiles).toBe(5);
+        });
+
+        it("should accept custom maxLogSizeMB and maxLogFiles", () => {
+            const config = validateConfig({
+                maxLogSizeMB: 20,
+                maxLogFiles: 3,
+                syncSets: [],
+            });
+            expect(config.maxLogSizeMB).toBe(20);
+            expect(config.maxLogFiles).toBe(3);
+        });
+
+        it("should reject non-positive maxLogSizeMB", () => {
+            expect(() =>
+                validateConfig({ maxLogSizeMB: 0, syncSets: [] }),
+            ).toThrow("maxLogSizeMB must be a positive number");
+        });
+
+        it("should reject non-positive maxLogFiles", () => {
+            expect(() =>
+                validateConfig({ maxLogFiles: 0, syncSets: [] }),
+            ).toThrow("maxLogFiles must be a positive integer");
+        });
+
+        it("should reject non-integer maxLogFiles", () => {
+            expect(() =>
+                validateConfig({ maxLogFiles: 2.5, syncSets: [] }),
+            ).toThrow("maxLogFiles must be a positive integer");
+        });
     });
 });

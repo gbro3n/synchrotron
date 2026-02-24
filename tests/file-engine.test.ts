@@ -160,4 +160,54 @@ describe("SyncEngine — file sets", () => {
             expect(fs.readFileSync(f2, "utf-8")).toBe("newer version");
         });
     });
+
+    describe("sync actions tracking (file sets)", () => {
+        it("should record added actions for fresh peer copy", async () => {
+            const src = path.join(dir1, "data.txt");
+            const dest = path.join(dir2, "data.txt");
+            fs.writeFileSync(src, "hello");
+
+            const result = await engine.syncFileSet({
+                type: "file",
+                paths: [src, dest],
+            });
+
+            const addedActions = result.actions.filter((a) => a.type === "added");
+            expect(addedActions.length).toBe(1);
+            expect(addedActions[0].sourcePath).toBe(src);
+            expect(addedActions[0].destPath).toBe(dest);
+        });
+
+        it("should record modified actions when a peer changes", async () => {
+            const f1 = path.join(dir1, "data.txt");
+            const f2 = path.join(dir2, "data.txt");
+            fs.writeFileSync(f1, "original");
+            fs.writeFileSync(f2, "original");
+
+            await engine.syncFileSet({ type: "file", paths: [f1, f2] });
+
+            fs.writeFileSync(f1, "changed");
+            const result = await engine.syncFileSet({ type: "file", paths: [f1, f2] });
+
+            const modifiedActions = result.actions.filter((a) => a.type === "modified");
+            expect(modifiedActions.length).toBe(1);
+        });
+
+        it("should record conflict actions when both peers change", async () => {
+            const f1 = path.join(dir1, "shared.txt");
+            const f2 = path.join(dir2, "shared.txt");
+            fs.writeFileSync(f1, "v1");
+            fs.writeFileSync(f2, "v1");
+
+            await engine.syncFileSet({ type: "file", paths: [f1, f2] });
+
+            fs.writeFileSync(f1, "f1 change");
+            fs.writeFileSync(f2, "f2 change");
+
+            const result = await engine.syncFileSet({ type: "file", paths: [f1, f2] });
+
+            const conflictActions = result.actions.filter((a) => a.type === "conflict");
+            expect(conflictActions.length).toBeGreaterThan(0);
+        });
+    });
 });

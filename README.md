@@ -94,7 +94,8 @@ conflictResolution: keep-both
 
 syncSets:
   # Directory set — syncs a full directory tree across multiple locations
-  - type: directory
+  - name: photos
+    type: directory
     paths:
       - /home/user/photos
       - /mnt/backup/photos
@@ -103,7 +104,8 @@ syncSets:
       - ".DS_Store"
 
   # Directory set with per-set overrides
-  - type: directory
+  - name: documents
+    type: directory
     paths:
       - /home/user/documents
       - /mnt/backup/documents
@@ -112,7 +114,8 @@ syncSets:
     watchMode: poll
 
   # File set — syncs individual files by content (position-based, not name-based)
-  - type: file
+  - name: hosts
+    type: file
     paths:
       - /etc/hosts
       - /mnt/backup/hosts
@@ -122,11 +125,14 @@ syncSets:
 
 | Option | Level | Applies To | Default | Description |
 |---|---|---|---|---|
+| `name` | Per-set | All sets | *(optional)* | Label for log readability and status display |
 | `type` | Per-set | All sets | *(required)* | `directory` or `file` |
 | `pollInterval` | Global / Per-set | All sets | `5000` | Milliseconds between sync cycles |
 | `conflictResolution` | Global / Per-set | All sets | `keep-both` | `keep-both` or `last-write-wins` |
 | `watchMode` | Per-set | Directory sets | `auto` | `auto`, `watch`, or `poll` |
 | `ignore` | Per-set | Directory sets | `[]` | Glob patterns to ignore |
+| `maxLogSizeMB` | Global | — | `10` | Max log file size in MB before rotation |
+| `maxLogFiles` | Global | — | `5` | Max number of rotated log files to keep |
 
 ### Conflict Resolution Strategies
 
@@ -138,6 +144,30 @@ syncSets:
 - **`auto`** (default) — uses `fs.watch` for real-time detection; falls back to polling if `fs.watch` errors (e.g. on network drives).
 - **`watch`** — uses `fs.watch` only. Will error if the filesystem doesn't support it.
 - **`poll`** — polling only. Works everywhere but uses more CPU. Use this for network drives.
+
+## Logging
+
+The daemon writes to `~/.synchrotron/logs/synchrotron.log` with size-based rotation:
+
+- When the log reaches `maxLogSizeMB` (default 10 MB), it is rotated to `synchrotron.1.log`, `synchrotron.2.log`, etc.
+- At most `maxLogFiles` (default 5) rotated files are kept; older ones are deleted.
+
+Both values can be set in `.synchrotron.yml`:
+
+```yaml
+maxLogSizeMB: 20
+maxLogFiles: 3
+```
+
+Log lines include per-file action detail:
+
+```
+[2026-02-24T14:30:00.000Z] [INFO] Syncing "photos" (directory)...
+[2026-02-24T14:30:00.050Z] [INFO]   + /home/user/photos/new.jpg → /mnt/backup/photos/new.jpg (added)
+[2026-02-24T14:30:00.120Z] [INFO]   ~ /home/user/photos/edit.jpg → /mnt/backup/photos/edit.jpg (modified)
+[2026-02-24T14:30:00.200Z] [INFO]   - /mnt/backup/photos/old.jpg (deleted)
+[2026-02-24T14:30:00.250Z] [INFO] Sync "photos" complete: +1 ~1 -1 conflicts:0 errors:0
+```
 
 ## How It Works
 
