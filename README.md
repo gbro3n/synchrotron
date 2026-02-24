@@ -26,7 +26,7 @@ Synchrotron runs in the background, syncing files and folders according to a `.y
 ## Installation
 
 ```bash
-npm install -g @gbro3n/synchrotron
+npm install -g @gbro3n/synchrotron (coming soon)
 ```
 
 ## Quick Start
