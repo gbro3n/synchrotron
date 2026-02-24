@@ -1,8 +1,14 @@
 # Synchrotron
 
-![Synchrotron](images/synchrotron.png)
+Local, platform-agnostic file synchronisation.
 
-A local, platform-agnostic file synchronisation tool built for Node.js.
+Synchrotron is for syncing files and folders across different paths on the same machine.
+
+I built Synchrotron to help me replicate common sets of non version controlled utility files in multiple Git projects, but is essentially general purpose local syncing.
+
+Synchrotron runs in the background, syncing files and folders according to a `.yaml` configuration file in your home directory.
+
+![Synchrotron](images/synchrotron.png)
 
 ## Features
 
