@@ -29,6 +29,7 @@ Thumbs.db
 # Apps own metadata files
 .synchrotron
 *.synchrotron
+*conflict*
 
 # Agents file
 
