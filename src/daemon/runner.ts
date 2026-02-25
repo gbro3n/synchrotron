@@ -198,6 +198,7 @@ export function runForeground(configDir?: string): void {
                 watchMode,
                 pollInterval,
                 ignorePatterns: syncSet.type === "directory" ? syncSet.ignore : undefined,
+                pathsAreFiles: syncSet.type === "file",
             });
 
             const idx = i;

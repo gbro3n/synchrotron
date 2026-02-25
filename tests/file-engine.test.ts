@@ -46,6 +46,25 @@ describe("SyncEngine — file sets", () => {
             expect(result.filesAdded).toBe(1);
         });
 
+        it("should populate fresh peers when all existing peers have matching sidecars", async () => {
+            const f1 = path.join(dir1, "config.json");
+            const f2 = path.join(dir2, "config.json");
+            const f3 = path.join(dir2, "subdir", "config.json"); // non-existent
+            fs.writeFileSync(f1, '{"key":"value"}');
+            fs.writeFileSync(f2, '{"key":"value"}');
+
+            // First sync to establish sidecars on f1 and f2
+            await engine.syncFileSet({ type: "file", paths: [f1, f2] });
+
+            // Now sync with a third fresh peer — sidecars exist, changedPeers=0
+            const result = await engine.syncFileSet({ type: "file", paths: [f1, f2, f3] });
+
+            expect(result.errors).toHaveLength(0);
+            expect(result.filesAdded).toBe(1);
+            expect(fs.existsSync(f3)).toBe(true);
+            expect(fs.readFileSync(f3, "utf-8")).toBe('{"key":"value"}');
+        });
+
         it("should write sidecar metadata after sync", async () => {
             const src = path.join(dir1, "config.json");
             const dest = path.join(dir2, "config.json");

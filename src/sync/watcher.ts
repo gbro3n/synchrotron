@@ -5,7 +5,7 @@ import type { WatchMode } from "../config/types.js";
 import { CONFIG_DEFAULTS } from "../config/types.js";
 
 export interface WatcherOptions {
-    /** Directories to watch */
+    /** Directories or files to watch */
     paths: string[];
     /** Watch mode: auto, watch, or poll */
     watchMode: WatchMode;
@@ -13,6 +13,8 @@ export interface WatcherOptions {
     pollInterval: number;
     /** Glob patterns to ignore */
     ignorePatterns?: string[];
+    /** When true, treat all paths as individual files (use file-specific watchers even if the path doesn't exist yet) */
+    pathsAreFiles?: boolean;
 }
 
 export interface ChangeEvent {
@@ -49,12 +51,14 @@ export class Watcher extends EventEmitter {
 
         for (const watchPath of this.options.paths) {
             // Determine if path is a file or directory
-            let isFile = false;
-            try {
-                const stat = fs.lstatSync(watchPath);
-                isFile = stat.isFile();
-            } catch {
-                // Path doesn't exist yet — fall back to directory watch
+            let isFile = this.options.pathsAreFiles ?? false;
+            if (!isFile) {
+                try {
+                    const stat = fs.lstatSync(watchPath);
+                    isFile = stat.isFile();
+                } catch {
+                    // Path doesn't exist yet — use pathsAreFiles hint or fall back to directory watch
+                }
             }
 
             if (isFile) {

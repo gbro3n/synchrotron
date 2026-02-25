@@ -418,12 +418,61 @@ export class SyncEngine {
         const changedPeers = peers.filter((p) => p.changed);
         const freshPeers = peers.filter((p) => !p.exists && p.metadata === null);
 
-        if (changedPeers.length === 0) {
+        if (changedPeers.length === 0 && freshPeers.length === 0) {
             // Nothing to do — all peers are in sync
             return result;
         }
 
         const syncTime = Date.now();
+
+        // When no content has changed but fresh peers exist (e.g. daemon restart
+        // with existing sidecars after a file was deleted), copy from any existing
+        // peer so the fresh peer is populated.
+        if (changedPeers.length === 0 && freshPeers.length > 0) {
+            const source = peers.find((p) => p.exists && p.currentHash !== null);
+            if (source) {
+                for (const dest of freshPeers) {
+                    try {
+                        this.copyFileDirect(source.filePath, dest.filePath);
+                        result.filesAdded++;
+                        result.actions.push({
+                            type: "added",
+                            sourcePath: source.filePath,
+                            destPath: dest.filePath,
+                        });
+                    } catch (err) {
+                        const message = err instanceof Error ? err.message : String(err);
+                        result.errors.push(`Error copying to ${dest.filePath}: ${message}`);
+                        result.actions.push({
+                            type: "error",
+                            sourcePath: source.filePath,
+                            destPath: dest.filePath,
+                            detail: message,
+                        });
+                    }
+                }
+
+                // Write sidecar metadata for the newly-created fresh peers
+                for (const peer of freshPeers) {
+                    if (fs.existsSync(peer.filePath)) {
+                        try {
+                            const stat = fs.statSync(peer.filePath);
+                            const newHash = hashFile(peer.filePath);
+                            writeFileMetadata(peer.filePath, {
+                                hash: newHash,
+                                mtimeMs: stat.mtimeMs,
+                                size: stat.size,
+                                lastSyncTime: syncTime,
+                            });
+                        } catch {
+                            // Best-effort metadata update
+                        }
+                    }
+                }
+            }
+
+            return result;
+        }
 
         if (changedPeers.length === 1) {
             // Exactly one changed peer — propagate to all others
