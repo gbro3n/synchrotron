@@ -5,7 +5,8 @@ import type { SynchrotronConfig } from "../config/types.js";
 import { SyncEngine } from "../sync/engine.js";
 import { Watcher, type ChangeEvent } from "../sync/watcher.js";
 import { Logger } from "./logger.js";
-import { writePidFile, removePidFile } from "./pid.js";
+import { writePidFile, readPidFile, removePidFile } from "./pid.js";
+import { isProcessRunning, killProcess } from "./process.js";
 
 /**
  * Run the sync daemon in the foreground (also used by the detached daemon entry).
@@ -31,6 +32,13 @@ export function runForeground(configDir?: string): void {
         maxLogSizeMB: config.maxLogSizeMB,
         maxLogFiles: config.maxLogFiles,
     });
+
+    // --- Self-check: kill any existing daemon before claiming PID file ---
+    const existingPid = readPidFile();
+    if (existingPid !== null && existingPid !== process.pid && isProcessRunning(existingPid)) {
+        logger.info(`Found existing daemon (PID: ${existingPid}). Killing before startup...`);
+        killProcess(existingPid);
+    }
 
     writePidFile();
     logger.info(`Daemon started (PID: ${process.pid})`);

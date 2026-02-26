@@ -71,7 +71,7 @@ export interface FileEntry {
 }
 
 /**
- * Sync metadata stored in each synced directory (.synchrotron file).
+ * Sync metadata stored in each synced directory (.sync file).
  */
 export interface SyncMetadata {
     /** Timestamp of the last completed sync (ms since epoch) */
@@ -101,7 +101,8 @@ export const CONFIG_DEFAULTS = {
     maxLogSizeMB: 10,
     maxLogFiles: 5,
     configFileName: ".synchrotron.yml",
-    metadataFileName: ".synchrotron",
+    metadataFileName: ".sync",
+    sidecarExtension: ".sync",
 } as const;
 
 /**

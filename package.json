@@ -13,8 +13,10 @@
     ],
     "scripts": {
         "build": "tsc",
+        "prebuild": "node -e \"try{require('child_process').execSync('synchrotron stop',{stdio:'ignore'})}catch(e){}\"",
         "watch": "tsc --watch",
         "start": "node dist/cli/index.js",
+        "prestart": "node -e \"try{require('child_process').execSync('synchrotron stop',{stdio:'ignore'})}catch(e){}\"",
         "lint": "eslint src/ --ext .ts",
         "lint:fix": "eslint src/ --ext .ts --fix",
         "format": "prettier --write \"src/**/*.ts\"",

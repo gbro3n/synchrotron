@@ -1,8 +1,14 @@
 import * as child_process from "node:child_process";
 import * as path from "node:path";
 import { loadConfig, getConfigHome } from "../../config/loader.js";
-import { getPidFilePath, readPidFile } from "../../daemon/pid.js";
+import { getPidFilePath, readPidFile, removePidFile } from "../../daemon/pid.js";
 import { runForeground } from "../../daemon/runner.js";
+import {
+    findSynchrotronProcesses,
+    isProcessRunning,
+    killProcess,
+    killAllSynchrotronProcesses,
+} from "../../daemon/process.js";
 
 interface StartOptions {
     foreground?: boolean;
@@ -16,14 +22,22 @@ export function startCommand(options: StartOptions): void {
         // Verify config exists and is valid before starting
         loadConfig(configDir);
 
-        // Check if already running
+        // --- Zombie prevention: kill ALL existing synchrotron daemon processes ---
+        // 1. Kill process from PID file (fast path)
         const existingPid = readPidFile();
         if (existingPid !== null) {
             if (isProcessRunning(existingPid)) {
-                console.error(`Synchrotron daemon is already running (PID: ${existingPid}).`);
-                process.exit(1);
+                console.log(`Stopping existing daemon (PID: ${existingPid})...`);
+                killProcess(existingPid);
             }
-            // Stale PID file — will be overwritten
+            removePidFile();
+        }
+
+        // 2. Scan for orphaned processes the PID file doesn't know about
+        const orphans = findSynchrotronProcesses();
+        if (orphans.length > 0) {
+            console.log(`Found ${orphans.length} orphaned daemon process(es). Killing...`);
+            killAllSynchrotronProcesses();
         }
 
         if (options.foreground) {
@@ -53,14 +67,5 @@ export function startCommand(options: StartOptions): void {
         const message = err instanceof Error ? err.message : String(err);
         console.error(`Error: ${message}`);
         process.exit(1);
-    }
-}
-
-function isProcessRunning(pid: number): boolean {
-    try {
-        process.kill(pid, 0);
-        return true;
-    } catch {
-        return false;
     }
 }

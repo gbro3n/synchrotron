@@ -26,8 +26,24 @@ export function buildManifest(
     const manifest: Record<string, FileEntry> = {};
 
     function shouldIgnore(relativePath: string): boolean {
-        // Always ignore the metadata file
-        if (path.basename(relativePath) === CONFIG_DEFAULTS.metadataFileName) {
+        const basename = path.basename(relativePath);
+        // Always ignore the directory metadata file and sidecar files
+        if (basename === CONFIG_DEFAULTS.metadataFileName) {
+            return true;
+        }
+        if (basename.endsWith(CONFIG_DEFAULTS.sidecarExtension)) {
+            return true;
+        }
+        // Ignore derivatives of metadata file (e.g. .sync.conflict-* from older versions)
+        if (basename.startsWith(CONFIG_DEFAULTS.metadataFileName + ".")) {
+            return true;
+        }
+        // Ignore legacy .synchrotron metadata files and their derivatives
+        if (basename === ".synchrotron" || basename.startsWith(".synchrotron.")) {
+            return true;
+        }
+        // Ignore sync-conflict files (created by keep-both conflict resolution)
+        if (basename.includes("sync-conflict")) {
             return true;
         }
         return ignorePatterns.some((pattern) => minimatch(relativePath, pattern, { dot: true }));

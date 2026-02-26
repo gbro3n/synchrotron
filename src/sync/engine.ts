@@ -342,7 +342,7 @@ export class SyncEngine {
             const ext = path.extname(relativePath);
             const base = relativePath.slice(0, -ext.length || undefined);
             const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-            const conflictName = `${base}.conflict-${timestamp}${ext}`;
+            const conflictName = `${base}.sync-conflict.${timestamp}${ext}`;
             const conflictPath = path.join(destDir, conflictName);
 
             // Rename existing dest file to conflict name
@@ -549,7 +549,7 @@ export class SyncEngine {
                     const ext = path.extname(loser.filePath);
                     const base = loser.filePath.slice(0, -ext.length || undefined);
                     const timestamp = new Date().toISOString().replace(/[:.]/g, "-");
-                    const conflictPath = `${base}.conflict-${timestamp}${ext}`;
+                    const conflictPath = `${base}.sync-conflict.${timestamp}${ext}`;
                     try {
                         fs.renameSync(loser.filePath, conflictPath);
                         result.actions.push({

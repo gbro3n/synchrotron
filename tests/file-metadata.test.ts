@@ -32,10 +32,10 @@ describe("File Metadata (Sidecar)", () => {
     });
 
     describe("getSidecarPath", () => {
-        it("should append .synchrotron to the file path", () => {
-            expect(getSidecarPath("/etc/hosts")).toBe("/etc/hosts.synchrotron");
-            expect(getSidecarPath("/home/user/file.txt")).toBe("/home/user/file.txt.synchrotron");
-            expect(getSidecarPath("/path/to/file.yaml")).toBe("/path/to/file.yaml.synchrotron");
+        it("should append .sync to the file path", () => {
+            expect(getSidecarPath("/etc/hosts")).toBe("/etc/hosts.sync");
+            expect(getSidecarPath("/home/user/file.txt")).toBe("/home/user/file.txt.sync");
+            expect(getSidecarPath("/path/to/file.yaml")).toBe("/path/to/file.yaml.sync");
         });
     });
 

@@ -2,7 +2,7 @@ import * as fs from "node:fs";
 
 /**
  * Metadata stored in a sidecar file alongside each peer file in a file-type sync set.
- * Sidecar path: <filePath>.synchrotron (e.g. /etc/hosts.synchrotron)
+ * Sidecar path: <filePath>.sync (e.g. /etc/hosts.sync)
  */
 export interface FileSyncMetadata {
     /** SHA-256 hash of the file at last sync */
@@ -17,10 +17,10 @@ export interface FileSyncMetadata {
 
 /**
  * Returns the sidecar metadata path for a given file path.
- * e.g. /etc/hosts → /etc/hosts.synchrotron
+ * e.g. /etc/hosts → /etc/hosts.sync
  */
 export function getSidecarPath(filePath: string): string {
-    return filePath + ".synchrotron";
+    return filePath + ".sync";
 }
 
 /**

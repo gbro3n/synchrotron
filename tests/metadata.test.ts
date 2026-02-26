@@ -53,10 +53,10 @@ describe("Sync Metadata", () => {
     });
 
     describe("writeMetadata", () => {
-        it("should write metadata to .synchrotron file", () => {
+        it("should write metadata to .sync file", () => {
             const metadata = createEmptyMetadata();
             writeMetadata(tempDir, metadata);
-            const metaPath = path.join(tempDir, ".synchrotron");
+            const metaPath = path.join(tempDir, ".sync");
             expect(fs.existsSync(metaPath)).toBe(true);
         });
     });

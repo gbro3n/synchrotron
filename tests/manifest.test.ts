@@ -46,11 +46,11 @@ describe("Manifest", () => {
             expect(manifest["sub/nested.txt"]).toBeDefined();
         });
 
-        it("should ignore .synchrotron metadata file", () => {
-            fs.writeFileSync(path.join(tempDir, ".synchrotron"), "{}");
+        it("should ignore .sync metadata file", () => {
+            fs.writeFileSync(path.join(tempDir, ".sync"), "{}");
             fs.writeFileSync(path.join(tempDir, "file.txt"), "hello");
             const manifest = buildManifest(tempDir);
-            expect(manifest[".synchrotron"]).toBeUndefined();
+            expect(manifest[".sync"]).toBeUndefined();
             expect(manifest["file.txt"]).toBeDefined();
         });
 

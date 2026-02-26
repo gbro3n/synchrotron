@@ -6,7 +6,7 @@ Synchrotron is for syncing files and folders across different paths on the same 
 
 I built Synchrotron to help me replicate common sets of non version controlled utility files in multiple Git projects, but is essentially general purpose local syncing.
 
-Synchrotron runs in the background, syncing files and folders according to a `.yaml` configuration file in your home directory.
+Synchrotron runs in the background, syncing files and folders according to a `.yaml` configuration file in your home directory. The main motivation for the `.yaml` based configuration is that the sync config can be version controlled. My personal workflow also includes version controlled copy of each of the sync sets, which acts as a backup for accidental deletes being synced across folders, and monitoring of the sync process.
 
 ![Synchrotron](images/synchrotron.png)
 
@@ -61,6 +61,8 @@ Create a `.synchrotron.yml` configuration file in `~/.synchrotron` (config home)
 
 Start the sync daemon in the background. Reads config from `~/.synchrotron/.synchrotron.yml` by default. Performs an initial sync of all sets, then watches for changes.
 
+If a daemon is already running, it is **automatically stopped** before starting the new one. This includes orphaned daemon processes that the PID file doesn't know about (see [Single Instance Enforcement](#single-instance-enforcement) below).
+
 | Flag | Description |
 |---|---|
 | `--foreground` | Run in the foreground instead of as a background daemon |
@@ -68,7 +70,7 @@ Start the sync daemon in the background. Reads config from `~/.synchrotron/.sync
 
 ### `synchrotron stop`
 
-Stop the running sync daemon. Sends SIGTERM for graceful shutdown, then SIGKILL after 5 seconds if needed.
+Stop the running sync daemon. Sends SIGTERM for graceful shutdown, then SIGKILL after 5 seconds if needed. Also scans for orphaned daemon processes and kills those too.
 
 ### `synchrotron status`
 
@@ -180,7 +182,7 @@ Log lines include per-file action detail:
 ### Directory Sets
 
 1. Each directory sync set defines 2+ directories to keep in sync.
-2. A `.synchrotron` metadata file in each directory tracks the file manifest (path, size, mtime, SHA-256 hash) at the last sync.
+2. A `.sync` metadata file in each directory tracks the file manifest (path, size, mtime, SHA-256 hash) at the last sync.
 3. On each sync cycle, the engine builds a current manifest, diffs it against the previous one, and propagates additions, modifications, and deletions across all directories in the set.
 4. Empty directories (with no metadata file) are treated as **fresh peers** — they receive all files and no deletions are propagated to/from them.
 5. Symlinks are skipped. Files with permission errors or locks are skipped with warnings.
@@ -190,9 +192,134 @@ Log lines include per-file action detail:
 
 1. Each file sync set defines 2+ individual files to keep in sync (e.g. `/etc/hosts` and a backup copy).
 2. Sync is **positional** — `paths[0]` is treated as the reference; if it changes, the change propagates to all other paths.
-3. A `<filename>.<ext>.synchrotron` sidecar file next to each path records the hash, mtime, and size at last sync.
+3. A `<filename>.sync` sidecar file next to each path records the hash, mtime, and size at last sync.
 4. Peers with no sidecar are treated as **fresh peers** — they receive the content with no deletions involved.
 5. File sets support the same conflict resolution strategies as directory sets.
+
+## Technical Internals
+
+### Config Home
+
+All runtime files live under `~/.synchrotron/`:
+
+```
+~/.synchrotron/
+├── .synchrotron.yml          # Configuration file
+├── daemon.pid                # PID of the running daemon process
+└── logs/
+    ├── synchrotron.log       # Current log file
+    ├── synchrotron.1.log     # Most recent rotated log
+    ├── synchrotron.2.log     # Older rotated logs...
+    └── ...
+```
+
+### `.sync` — Directory Metadata Files
+
+Each synced directory contains a hidden `.sync` file (JSON, pretty-printed) that records the state of the directory at the last completed sync. The engine uses this to compute diffs between sync cycles.
+
+```json
+{
+  "lastSyncTime": 1740412200000,
+  "manifest": {
+    "notes.md": {
+      "relativePath": "notes.md",
+      "size": 2048,
+      "mtimeMs": 1740412100000,
+      "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    "subfolder/data.csv": {
+      "relativePath": "subfolder/data.csv",
+      "size": 51200,
+      "mtimeMs": 1740411000000,
+      "hash": "a1b2c3d4e5f6..."
+    }
+  }
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `lastSyncTime` | `number` | Milliseconds since epoch when the sync completed |
+| `manifest` | `Record<string, FileEntry>` | Map of relative file paths to their entry |
+| `manifest[*].relativePath` | `string` | Path relative to the sync directory root |
+| `manifest[*].size` | `number` | File size in bytes |
+| `manifest[*].mtimeMs` | `number` | Last modified time (ms since epoch) |
+| `manifest[*].hash` | `string` | SHA-256 hex digest of the file contents |
+
+A directory with no `.sync` file is treated as a **fresh peer** — it receives all files from other peers and never contributes deletions.
+
+### `<file>.sync` — File Set Sidecar Metadata
+
+For file-type sync sets, each peer file has a sidecar metadata file at `<filepath>.sync` (e.g. `/etc/hosts.sync`). It records the state of that individual file at last sync.
+
+```json
+{
+  "hash": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "mtimeMs": 1740412100000,
+  "size": 2048,
+  "lastSyncTime": 1740412200000
+}
+```
+
+| Field | Type | Description |
+|---|---|---|
+| `hash` | `string` | SHA-256 hex digest of the file contents at last sync |
+| `mtimeMs` | `number` | Last modified time (ms since epoch) at last sync |
+| `size` | `number` | File size in bytes at last sync |
+| `lastSyncTime` | `number` | Milliseconds since epoch when the sync completed |
+
+A file with no sidecar is treated as a **fresh peer** and receives content from peers that do have metadata.
+
+### `daemon.pid` — PID File
+
+Located at `~/.synchrotron/daemon.pid`. Contains the process ID (as a plain integer string) of the currently running daemon.
+
+- **Written** by the daemon on startup (`entry.ts`)
+- **Read** by `synchrotron stop` and `synchrotron status` to locate the running process
+- **Removed** by the daemon on graceful shutdown (SIGTERM/SIGINT handler)
+
+If the daemon crashes or is killed without cleanup, a **stale PID file** may remain. `synchrotron status` checks whether the recorded PID is actually alive. `synchrotron start` will refuse to start if the PID file exists and the process is still running.
+
+### `synchrotron.log` — Log File
+
+Located at `~/.synchrotron/logs/synchrotron.log`. Each line is a timestamped, level-tagged message:
+
+```
+[<ISO-8601 timestamp>] [<LEVEL>] <message>
+```
+
+Levels are `INFO`, `WARN`, and `ERROR`. Example output from a sync cycle:
+
+```
+[2026-02-24T14:30:00.000Z] [INFO] Syncing "photos" (directory)...
+[2026-02-24T14:30:00.050Z] [INFO]   + /home/user/photos/new.jpg → /mnt/backup/photos/new.jpg (added)
+[2026-02-24T14:30:00.120Z] [INFO]   ~ /home/user/photos/edit.jpg → /mnt/backup/photos/edit.jpg (modified)
+[2026-02-24T14:30:00.200Z] [INFO]   - /mnt/backup/photos/old.jpg (deleted)
+[2026-02-24T14:30:00.250Z] [INFO] Sync "photos" complete: +1 ~1 -1 conflicts:0 errors:0
+```
+
+**Rotation**: when the log reaches `maxLogSizeMB` (default 10 MB), it is rotated:
+
+- `synchrotron.log` → `synchrotron.1.log`
+- `synchrotron.1.log` → `synchrotron.2.log`
+- ... up to `maxLogFiles` (default 5); older files are deleted.
+
+## Single Instance Enforcement
+
+Synchrotron enforces that only one daemon process runs at a time. Multiple running daemons cause metadata conflicts and cascading file storms (see [TROUBLESHOOTING.md](TROUBLESHOOTING.md) for details).
+
+Protection is layered:
+
+1. **`synchrotron start` kills existing daemons** — reads the PID file and kills that process, then performs a platform-specific OS process scan to find and kill any orphaned daemon processes the PID file doesn't know about.
+2. **Daemon self-check** — on startup, the daemon itself checks the PID file and kills any existing daemon before claiming it. This catches cases where the daemon entry point is invoked directly.
+3. **npm script hooks** — `npm run build` and `npm start` both automatically run `synchrotron stop` before proceeding, preventing the common development mistake of rebuilding without stopping.
+4. **`synchrotron stop` scans for orphans** — after stopping the PID-file daemon, it scans for any remaining daemon processes.
+
+The process scanner uses:
+- **Windows**: `wmic process` to find all `node.exe` processes with synchrotron's daemon entry in the command line
+- **Linux / macOS**: `ps -eo pid,args` to find matching processes
+
+If process scanning fails (e.g. restricted permissions), the PID-file-based approach is used as a fallback.
 
 ## Development
 

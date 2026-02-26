@@ -109,7 +109,15 @@ export class Watcher extends EventEmitter {
 
     private shouldIgnore(filePath: string): boolean {
         const basename = path.basename(filePath);
-        return basename === CONFIG_DEFAULTS.metadataFileName;
+        if (basename === CONFIG_DEFAULTS.metadataFileName) return true;
+        if (basename.endsWith(CONFIG_DEFAULTS.sidecarExtension)) return true;
+        // Ignore derivatives of metadata file (e.g. .sync.conflict-* from older versions)
+        if (basename.startsWith(CONFIG_DEFAULTS.metadataFileName + ".")) return true;
+        // Ignore legacy .synchrotron metadata files and their derivatives
+        if (basename === ".synchrotron" || basename.startsWith(".synchrotron.")) return true;
+        // Ignore sync-conflict files (created by keep-both conflict resolution)
+        if (basename.includes("sync-conflict")) return true;
+        return false;
     }
 
     private startFsWatch(dirPath: string): void {
