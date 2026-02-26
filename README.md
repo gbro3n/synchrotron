@@ -8,7 +8,7 @@ I built Synchrotron to help me replicate common sets of non version controlled u
 
 Synchrotron runs in the background, syncing files and folders according to a `.yaml` configuration file in your home directory. The main motivation for the `.yaml` based configuration is that the sync config can be version controlled. My personal workflow also includes version controlled copy of each of the sync sets, which acts as a backup for accidental deletes being synced across folders, and monitoring of the sync process.
 
-![Synchrotron](images/synchrotron.png)
+![Synchrotron](https://github.com/gbro3n/synchrotron/blob/main/images/synchrotron.png?raw=true)
 
 ## Features
 
@@ -316,6 +316,7 @@ Protection is layered:
 4. **`synchrotron stop` scans for orphans** — after stopping the PID-file daemon, it scans for any remaining daemon processes.
 
 The process scanner uses:
+
 - **Windows**: `wmic process` to find all `node.exe` processes with synchrotron's daemon entry in the command line
 - **Linux / macOS**: `ps -eo pid,args` to find matching processes
 
