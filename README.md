@@ -1,5 +1,7 @@
 # Synchrotron
 
+> Note that Synchrotron is in Alpha Testing currently. Use at your own risk and expect issues.
+
 Local, platform-agnostic file synchronisation.
 
 Synchrotron is for syncing files and folders across different paths on the same machine.
