@@ -2,7 +2,7 @@ import { describe, it, expect, beforeEach, afterEach } from "vitest";
 import * as fs from "node:fs";
 import * as path from "node:path";
 import * as os from "node:os";
-import { buildManifest, diffManifests } from "../src/sync/manifest.js";
+import { buildManifest, diffManifests, filterManifest } from "../src/sync/manifest.js";
 import type { FileEntry } from "../src/config/types.js";
 
 function createTempDir(): string {
@@ -133,6 +133,50 @@ describe("Manifest", () => {
             expect(diff.added).toHaveLength(0);
             expect(diff.deleted).toHaveLength(0);
             expect(diff.modified).toHaveLength(0);
+        });
+    });
+
+    describe("filterManifest", () => {
+        const makeEntry = (relativePath: string): FileEntry => ({
+            relativePath,
+            size: 5,
+            mtimeMs: 1000,
+            hash: "abc",
+        });
+
+        it("should return manifest unchanged when no ignore patterns", () => {
+            const manifest = { "file.txt": makeEntry("file.txt"), "notes.md": makeEntry("notes.md") };
+            const result = filterManifest(manifest, []);
+            expect(Object.keys(result)).toHaveLength(2);
+        });
+
+        it("should remove entries matching an ignore pattern", () => {
+            const manifest = {
+                "file.txt": makeEntry("file.txt"),
+                "plan.md": makeEntry("plan.md"),
+                "todo.md": makeEntry("todo.md"),
+            };
+            const result = filterManifest(manifest, ["*.md"]);
+            expect(result["file.txt"]).toBeDefined();
+            expect(result["plan.md"]).toBeUndefined();
+            expect(result["todo.md"]).toBeUndefined();
+        });
+
+        it("should not treat filtered-out entries as deletions when diffed", () => {
+            // Regression: adding ignore patterns must not make previously-tracked
+            // files appear as deleted in the next diff.
+            const prevManifest = {
+                "file.txt": makeEntry("file.txt"),
+                "plan.md": makeEntry("plan.md"),
+            };
+            const currManifest = {
+                // plan.md is now ignored — absent from current manifest
+                "file.txt": makeEntry("file.txt"),
+            };
+            const filteredPrev = filterManifest(prevManifest, ["*.md"]);
+            const diff = diffManifests(filteredPrev, currManifest);
+            expect(diff.deleted).toHaveLength(0);
+            expect(diff.unchanged).toHaveLength(1);
         });
     });
 });

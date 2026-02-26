@@ -100,6 +100,28 @@ export function buildManifest(
 }
 
 /**
+ * Filter a manifest to remove entries matching ignore patterns.
+ * Used to strip previously-tracked files that are now ignored, preventing
+ * them from appearing as deletions when ignore patterns are added/changed.
+ */
+export function filterManifest(
+    manifest: Record<string, FileEntry>,
+    ignorePatterns: string[],
+): Record<string, FileEntry> {
+    if (ignorePatterns.length === 0) return manifest;
+    const filtered: Record<string, FileEntry> = {};
+    for (const [relativePath, entry] of Object.entries(manifest)) {
+        const isIgnored = ignorePatterns.some((pattern) =>
+            minimatch(relativePath, pattern, { dot: true }),
+        );
+        if (!isIgnored) {
+            filtered[relativePath] = entry;
+        }
+    }
+    return filtered;
+}
+
+/**
  * Diff a previous manifest against the current state of a directory.
  * Detects added, deleted, modified, and unchanged files.
  */

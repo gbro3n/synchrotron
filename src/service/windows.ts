@@ -11,12 +11,17 @@ export function buildTaskSchedulerArgs(configDir: string, nodePath?: string): st
     const node = nodePath ?? process.execPath;
     const cliPath = path.resolve(__dirname, "..", "cli", "index.js");
 
+    // schtasks /TR expects the full run command as a single value.
+    // Wrap each token in quotes to handle paths with spaces, then wrap the
+    // whole value in an outer pair of double-quotes for cmd.exe parsing.
+    const tr = `\"${node}\" \"${cliPath}\" start --foreground`;
+
     return [
         "/Create",
         "/TN",
         TASK_NAME,
         "/TR",
-        `"${node}" "${cliPath}" start --foreground`,
+        tr,
         "/SC",
         "ONLOGON",
         "/RL",
@@ -34,7 +39,7 @@ export function installTaskScheduler(configDir: string): void {
 
     const result = child_process.spawnSync("schtasks", args, {
         encoding: "utf-8",
-        shell: true,
+        shell: false,
     });
 
     if (result.status !== 0) {

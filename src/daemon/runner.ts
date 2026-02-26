@@ -1,7 +1,8 @@
 import * as fs from "node:fs";
 import * as path from "node:path";
-import { loadConfig } from "../config/loader.js";
+import { loadConfig, getConfigHome } from "../config/loader.js";
 import type { SynchrotronConfig } from "../config/types.js";
+import { CONFIG_DEFAULTS } from "../config/types.js";
 import { SyncEngine } from "../sync/engine.js";
 import { Watcher, type ChangeEvent } from "../sync/watcher.js";
 import { Logger } from "./logger.js";
@@ -44,7 +45,7 @@ export function runForeground(configDir?: string): void {
     logger.info(`Daemon started (PID: ${process.pid})`);
     logger.info(`Config loaded: ${config.syncSets.length} sync set(s)`);
 
-    const engine = new SyncEngine(config.conflictResolution);
+    let engine = new SyncEngine(config.conflictResolution);
 
     /**
      * Build a human-readable label for a sync set.
@@ -84,11 +85,79 @@ export function runForeground(configDir?: string): void {
         }
     }
 
+    // ── Config file hot-reload ──────────────────────────────────────────────
+    const configFilePath = path.join(configDir ?? getConfigHome(), CONFIG_DEFAULTS.configFileName);
+    let configFileWatcher: fs.FSWatcher | null = null;
+    let configReloadTimer: NodeJS.Timeout | null = null;
+    const CONFIG_RELOAD_DEBOUNCE_MS = 2000;
+
+    function stopConfigWatcher(): void {
+        if (configReloadTimer !== null) {
+            clearTimeout(configReloadTimer);
+            configReloadTimer = null;
+        }
+        if (configFileWatcher !== null) {
+            try {
+                configFileWatcher.close();
+            } catch {
+                // ignore
+            }
+            configFileWatcher = null;
+        }
+    }
+
+    function applyNewConfig(newConfig: SynchrotronConfig): void {
+        logger.info("Config changed — reloading sync sets...");
+        stopWatchers();
+        config = newConfig;
+        engine = new SyncEngine(config.conflictResolution);
+        initialSync().then(() => {
+            if (running) {
+                startWatchers();
+                startConfigWatcher();
+                logger.info("Config reloaded. All watchers restarted.");
+            }
+        }).catch((err: unknown) => {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.error(`Error during post-reload sync: ${message}`);
+        });
+    }
+
+    function startConfigWatcher(): void {
+        stopConfigWatcher();
+        try {
+            configFileWatcher = fs.watch(configFilePath, (_event) => {
+                if (configReloadTimer !== null) {
+                    clearTimeout(configReloadTimer);
+                }
+                configReloadTimer = setTimeout(() => {
+                    configReloadTimer = null;
+                    try {
+                        const newConfig = loadConfig(configDir);
+                        applyNewConfig(newConfig);
+                    } catch (err) {
+                        const message = err instanceof Error ? err.message : String(err);
+                        logger.error(`Config reload failed (keeping existing config): ${message}`);
+                    }
+                }, CONFIG_RELOAD_DEBOUNCE_MS);
+            });
+            configFileWatcher.on("error", (err) => {
+                logger.warn(`Config file watcher error: ${err.message}. Hot-reload disabled.`);
+                stopConfigWatcher();
+            });
+            logger.info(`Watching config for changes: ${configFilePath}`);
+        } catch (err) {
+            const message = err instanceof Error ? err.message : String(err);
+            logger.warn(`Cannot watch config file: ${message}. Hot-reload disabled.`);
+        }
+    }
+
     // Set up graceful shutdown
     const shutdown = (): void => {
         if (!running) return;
         running = false;
         logger.info("Shutdown signal received. Stopping...");
+        stopConfigWatcher();
         stopWatchers();
         removePidFile();
         logger.info("Daemon stopped.");
@@ -228,6 +297,7 @@ export function runForeground(configDir?: string): void {
     initialSync().then(() => {
         if (running) {
             startWatchers();
+            startConfigWatcher();
             logger.info("All watchers started. Daemon is running.");
         }
     });

@@ -10,7 +10,7 @@ import type {
 } from "../config/types.js";
 import { CONFIG_DEFAULTS } from "../config/types.js";
 import { readMetadata, writeMetadata, createEmptyMetadata } from "./metadata.js";
-import { buildManifest, diffManifests, hashFile } from "./manifest.js";
+import { buildManifest, diffManifests, hashFile, filterManifest } from "./manifest.js";
 import { readFileMetadata, writeFileMetadata, type FileSyncMetadata } from "./file-metadata.js";
 
 /** Threshold above which we use streaming copy (10 MB) */
@@ -79,7 +79,12 @@ export class SyncEngine {
             const currentManifest = buildManifest(dirPath, ignorePatterns);
             const previousMetadata = readMetadata(dirPath);
             const isFresh = previousMetadata === null;
-            const previousManifest = previousMetadata?.manifest ?? {};
+            // Filter previousManifest through current ignore patterns so that files
+            // which are now ignored don't appear as deletions in the diff.
+            const previousManifest = filterManifest(
+                previousMetadata?.manifest ?? {},
+                ignorePatterns,
+            );
             return { dirPath, currentManifest, previousManifest, isFresh };
         });
 
